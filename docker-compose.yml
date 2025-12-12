@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # 1. THE DATABASE
+  postgres:
+    image: postgres:15-alpine
+    container_name: system_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: securepassword
+      POSTGRES_DB: main_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend_network
+
+  # 2. THE DATABASE GUI (PGADMIN)
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: system_pgadmin
+    ports:
+      - "5050:80" # Access via http://localhost:5050
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: securepassword
+    volumes:
+       - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - backend_network
+    depends_on:
+      - postgres
+
+  # 3. THE MESSAGE BROKER
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: system_rabbitmq
+    ports:
+      - "5672:5672"   # Protocol Port
+      - "15672:15672" # GUI Port
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: securepassword
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - backend_network
+
+  # 4. THE CACHE & IDEMPOTENCY STORE
+  redis:
+    image: redis:alpine
+    container_name: system_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend_network
+
+volumes:
+  postgres_data:
+  pgadmin_data: # Persist pgadmin settings
+  rabbitmq_data:
+  redis_data:
+
+networks:
+  backend_network:
+    driver: bridge
