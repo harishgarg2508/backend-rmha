@@ -2,7 +2,7 @@ import { Command, CommandRunner } from 'nest-commander';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Outbox } from '../infrastructure/database/entities/outbox.entity';
+import { Outbox, OutboxEventStatus } from '../infrastructure/database/entities/outbox.entity';
 import * as amqp from 'amqplib';
 
 @Injectable()
@@ -14,10 +14,8 @@ export class DispatchMessagesCommand extends CommandRunner {
   private connection: amqp.Connection;
   private channel: amqp.ConfirmChannel;
 
-  constructor(
-    @InjectRepository(Outbox)
-    private readonly outboxRepository: Repository<Outbox>,
-  ) {
+  constructor(@InjectRepository(Outbox)
+   private readonly outboxRepository: Repository<Outbox>,){
     super();
   }
 
@@ -30,7 +28,7 @@ export class DispatchMessagesCommand extends CommandRunner {
       console.log(' Connected to RabbitMQ');
 
       const unprocessedMessages = await this.outboxRepository.find({
-        where: { processed: false },
+        where: { processed: OutboxEventStatus.PENDING },
         order: { createdAt: 'ASC' },
       });
 
@@ -45,7 +43,7 @@ export class DispatchMessagesCommand extends CommandRunner {
       for (const message of unprocessedMessages) {
         try {
           await this.publishMessage(message);
-          message.processed = true;
+          message.processed = OutboxEventStatus.PROCESSED;
           await this.outboxRepository.save(message);
           
           console.log(` Dispatched message ID: ${message.id}`);

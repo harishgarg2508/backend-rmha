@@ -1,11 +1,11 @@
-import {
-  Column,
-  CreateDateColumn,
-  DeleteDateColumn,
-  Entity,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, CreateDateColumn, DeleteDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn} from 'typeorm';
+
+export enum OutboxEventStatus {
+  PENDING = 'PENDING',
+  PROCESSED = 'PROCESSED',
+  FAILED = 'FAILED',
+}
+
 
 @Entity('outbox')
 export class Outbox {
@@ -18,8 +18,8 @@ export class Outbox {
   @Column('jsonb')
   payload: any;
 
-  @Column({ default: false })
-  processed: boolean;
+  @Column({ default: OutboxEventStatus.PENDING })
+  processed: OutboxEventStatus;
 
   @CreateDateColumn()
   createdAt: Date;
