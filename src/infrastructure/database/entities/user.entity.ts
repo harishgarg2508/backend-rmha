@@ -1,11 +1,18 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+import { UserStatus } from '../../../domain/user-status.enum';
 
-@Entity('users') 
+@Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
+  @Column()
   name: string;
 
   @Column()
@@ -16,11 +23,12 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @Column({
+    type: 'enum',
+    enum: UserStatus,
+    nullable: true,
+    default: null,
+  })
+  status: UserStatus | null;
 }
-
-
-
-//   // Optimistic Locking: Automatically increments on every save.
-//   // This solves "Lost Update" problems (Architecture Rule #6)
-//   @VersionColumn()
-//   version: number;

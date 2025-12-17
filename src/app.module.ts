@@ -7,6 +7,7 @@ import { CreateUserModule } from './feature/create-user/create-user.module';
 import { addTransactionalDataSource } from 'typeorm-transactional';
 import { DataSource } from 'typeorm';
 import { CommandsModule } from './commands/commands.module';
+import { RabbitmqModule } from './infrastructure/rabbitmq/rabbitmq.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { CommandsModule } from './commands/commands.module';
     }),
     CreateUserModule,
     CommandsModule,
+    RabbitmqModule,
   ],
   controllers: [AppController],
   providers: [AppService],

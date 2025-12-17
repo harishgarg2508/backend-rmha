@@ -39,6 +39,8 @@ services:
     ports:
       - "5672:5672"   # Protocol Port
       - "15672:15672" # GUI Port
+    command: >
+      bash -c "rabbitmq-plugins enable --offline rabbitmq_consistent_hash_exchange && rabbitmq-server"
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: securepassword

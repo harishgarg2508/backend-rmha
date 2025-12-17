@@ -1,37 +1,48 @@
-import { Column, CreateDateColumn, DeleteDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn} from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  DeleteDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
-export enum OutboxEventStatus {
+export enum OutboxMessageStatus {
   PENDING = 'PENDING',
-  PROCESSED = 'PROCESSED',
+  SENT = 'SENT',
   FAILED = 'FAILED',
 }
 
-
 @Entity('outbox')
 export class Outbox {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-  @Column()
-  eventType: string;
+  @Column({ name: 'message_id', type: 'uuid', unique: true })
+  messageId: string;
 
-  @Column('jsonb')
-  payload: any;
+  @Column({ type: 'varchar', length: 100 })
+  type: string;
 
-  @Column({ default: OutboxEventStatus.PENDING })
-  processed: OutboxEventStatus;
+  @Column({ type: 'varchar', length: 100,nullable:true })
+  handlerName: string;
 
-  @CreateDateColumn()
+  @Column({ type: 'jsonb', nullable: true })
+  headers: object;
+
+  @Column({ type: 'jsonb', nullable: true })
+  body: object;
+
+  @Column({
+    type: 'enum',
+    enum: OutboxMessageStatus,
+    default: OutboxMessageStatus.PENDING,
+  })
+  status: OutboxMessageStatus;
+
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
-
-  @Column({ nullable: true })
-  sentAt: Date;
-
-  @DeleteDateColumn()
-  deletedAt: Date;
-  
 }
-

@@ -2,90 +2,79 @@ import { Command, CommandRunner } from 'nest-commander';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Outbox, OutboxEventStatus } from '../infrastructure/database/entities/outbox.entity';
-import * as amqp from 'amqplib';
+import {
+  Outbox,
+  OutboxMessageStatus,
+} from '../infrastructure/database/entities/outbox.entity';
+import { RabbitmqConnectionService } from '../infrastructure/rabbitmq/rabbitmq-connection.service';
+import { RabbitmqConfigurerService } from '../infrastructure/rabbitmq/rabbitmq-configurer.service';
+import { ProducerService } from './producer.service';
 
 @Injectable()
 @Command({
   name: 'dispatch:messages',
-  description: 'Dispatch unprocessed messages from outbox to RabbitMQ',
+  description:
+    'Dispatch messages strictly ordered by Sequence ID to Sticky Lanes (Auto-Setup Topology)',
 })
 export class DispatchMessagesCommand extends CommandRunner {
-  private connection: amqp.Connection;
-  private channel: amqp.ConfirmChannel;
+  private isRunning = true;
 
-  constructor(@InjectRepository(Outbox)
-   private readonly outboxRepository: Repository<Outbox>,){
+  constructor(
+    @InjectRepository(Outbox)
+    private readonly outboxRepository: Repository<Outbox>,
+    private readonly connectionService: RabbitmqConnectionService,
+    private readonly configurerService: RabbitmqConfigurerService,
+    private readonly producerService: ProducerService,
+  ) {
     super();
   }
 
   async run(): Promise<void> {
-    console.log(' Starting outbox message dispatcher...');
+    console.log('Starting Ordered Dispatcher...');
 
-    try {
-      this.connection = await amqp.connect(process.env.RABBITMQ_URL as string);
-      this.channel = await this.connection.createConfirmChannel();
-      console.log(' Connected to RabbitMQ');
+    await this.connectionService.connect();
+    await this.configurerService.setupTopology();
 
-      const unprocessedMessages = await this.outboxRepository.find({
-        where: { processed: OutboxEventStatus.PENDING },
+    while (this.isRunning) {
+      const messages = await this.outboxRepository.find({
+        where: { status: OutboxMessageStatus.PENDING },
         order: { createdAt: 'ASC' },
+        take: 50,
       });
 
-      console.log(` Found ${unprocessedMessages.length} unprocessed messages`);
-
-      if (unprocessedMessages.length === 0) {
-        console.log(' No messages to dispatch');
-        await this.cleanup();
-        return;
+      if (messages.length === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        continue;
       }
 
-      for (const message of unprocessedMessages) {
+      for (const message of messages) {
         try {
-          await this.publishMessage(message);
-          message.processed = OutboxEventStatus.PROCESSED;
+          const headers = (message.headers as any) || {};
+          const routingKey = headers['routingKey'] || 'default';
+
+          const payload = {
+            messageId: message.messageId,
+            type: message.type,
+            body: message.body,
+            headers: message.headers,
+            createdAt: message.createdAt,
+          };
+
+          await this.producerService.publishToLane(routingKey, payload);
+
+          message.status = OutboxMessageStatus.SENT;
           await this.outboxRepository.save(message);
-          
-          console.log(` Dispatched message ID: ${message.id}`);
+
+          console.log(`Sent MsgID ${message.messageId} (Key: ${routingKey})`);
         } catch (error) {
-          console.error(` Failed to dispatch message ID: ${message.id}`, error);
+          console.error(
+            ` Dispatch Failed on MsgID ${message.messageId}`,
+            error,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 5000)); // Backoff
+          break;
         }
       }
-
-      console.log(' Dispatch completed!');
-      await this.cleanup();
-    } catch (error) {
-      console.error(' Dispatcher error:', error);
-      await this.cleanup();
-      process.exit(1);
-    }
-  }
-
-  private async publishMessage(message: Outbox): Promise<void> {
-    const queueName = 'user_created_queue';
-
-    await this.channel.assertQueue(queueName, { durable: true });
-
-    const isSent = this.channel.sendToQueue(
-      queueName,
-      Buffer.from(JSON.stringify(message.payload)),
-      { persistent: true }
-    );
-
-    if (!isSent) {
-      throw new Error('Failed to send message to queue');
-    }
-
-    await this.channel.waitForConfirms();
-  }
-
-  private async cleanup(): Promise<void> {
-    try {
-      await this.channel?.close();
-      await this.connection?.close();
-      console.log(' RabbitMQ connection closed');
-    } catch (error) {
-      console.error('Error during cleanup:', error);
     }
   }
 }
